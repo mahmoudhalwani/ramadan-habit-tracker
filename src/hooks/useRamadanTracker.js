@@ -100,6 +100,14 @@ export const useRamadanTracker = () => {
         });
     }, []);
 
+    // Load data from external source (e.g., GitHub sync)
+    const loadData = useCallback((externalData) => {
+        if (externalData.data) setData(externalData.data);
+        if (externalData.customHabits) setCustomHabits(externalData.customHabits);
+        if (typeof externalData.xp === 'number') setXp(externalData.xp);
+        if (externalData.currentDay) setCurrentDay(externalData.currentDay);
+    }, []);
+
     const resetData = useCallback(() => {
         setData({});
         setXp(0);
@@ -217,5 +225,6 @@ export const useRamadanTracker = () => {
         removeCustomHabit,
         data,
         customHabits,
+        loadData,
     };
 };
