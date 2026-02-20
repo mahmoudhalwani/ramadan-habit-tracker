@@ -1,213 +1,166 @@
 import { useState, useEffect, useCallback } from 'react';
 
 const AUTH_KEY = 'ramadan-tracker-auth';
-const GITHUB_API = 'https://api.github.com';
+const ACCOUNTS_KEY = 'ramadan-tracker-accounts';
+
+// Simple hash function for password storage (not cryptographic, but fine for local storage)
+const hashPassword = async (password) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+// Get all accounts from localStorage
+const getAccounts = () => {
+    try {
+        return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '{}');
+    } catch {
+        return {};
+    }
+};
+
+// Save accounts to localStorage
+const saveAccounts = (accounts) => {
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+};
 
 export const useAuth = () => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [syncing, setSyncing] = useState(false);
-    const [syncError, setSyncError] = useState(null);
-    const [lastSynced, setLastSynced] = useState(null);
 
-    // Load saved auth on mount
+    // Load saved session on mount
     useEffect(() => {
         const saved = localStorage.getItem(AUTH_KEY);
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
                 setUser(parsed);
-                if (parsed.lastSynced) setLastSynced(new Date(parsed.lastSynced));
-            } catch (e) {
-                console.error('Failed to load auth data', e);
+            } catch {
+                localStorage.removeItem(AUTH_KEY);
             }
         }
         setLoading(false);
     }, []);
 
-    // Save auth to localStorage
-    const saveAuth = useCallback((userData) => {
-        localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
+    // Create a new account with email + password
+    const createAccount = useCallback(async (name, email, password) => {
+        try {
+            const normalizedEmail = email.trim().toLowerCase();
+
+            // Validate inputs
+            if (!name.trim()) {
+                return { success: false, error: 'Please enter your name' };
+            }
+            if (!normalizedEmail || !normalizedEmail.includes('@')) {
+                return { success: false, error: 'Please enter a valid email' };
+            }
+            if (password.length < 6) {
+                return { success: false, error: 'Password must be at least 6 characters' };
+            }
+
+            // Check if account already exists
+            const accounts = getAccounts();
+            if (accounts[normalizedEmail]) {
+                return { success: false, error: 'An account with this email already exists. Try signing in instead.' };
+            }
+
+            // Hash password and create account
+            const passwordHash = await hashPassword(password);
+            const userId = 'user_' + Date.now().toString(36);
+
+            accounts[normalizedEmail] = {
+                id: userId,
+                name: name.trim(),
+                email: normalizedEmail,
+                passwordHash,
+                createdAt: new Date().toISOString(),
+                trackerData: null,
+            };
+
+            saveAccounts(accounts);
+
+            // Set session
+            const userData = { id: userId, name: name.trim(), email: normalizedEmail };
+            setUser(userData);
+            localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
+
+            return { success: true, user: userData };
+        } catch (error) {
+            return { success: false, error: 'Something went wrong. Please try again.' };
+        }
     }, []);
 
-    // Login with GitHub Personal Access Token
-    const loginWithGitHub = useCallback(async (token) => {
+    // Sign in with email + password
+    const signIn = useCallback(async (email, password) => {
         try {
-            setLoading(true);
-            setSyncError(null);
+            const normalizedEmail = email.trim().toLowerCase();
 
-            // Validate token by fetching user info
-            const res = await fetch(`${GITHUB_API}/user`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                }
-            });
-
-            if (!res.ok) {
-                throw new Error('Invalid token. Please check your GitHub Personal Access Token.');
+            if (!normalizedEmail || !normalizedEmail.includes('@')) {
+                return { success: false, error: 'Please enter a valid email' };
+            }
+            if (!password) {
+                return { success: false, error: 'Please enter your password' };
             }
 
-            const githubUser = await res.json();
+            const accounts = getAccounts();
+            const account = accounts[normalizedEmail];
 
-            const userData = {
-                id: githubUser.id,
-                name: githubUser.name || githubUser.login,
-                login: githubUser.login,
-                avatar: githubUser.avatar_url,
-                token: token,
-                gistId: null,
-                lastSynced: null,
-            };
-
-            // Check if user already has a Ramadan Tracker gist
-            const gistsRes = await fetch(`${GITHUB_API}/gists?per_page=100`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                }
-            });
-
-            if (gistsRes.ok) {
-                const gists = await gistsRes.json();
-                const existingGist = gists.find(g =>
-                    g.description === 'Ramadan Habit Tracker - Data Backup' &&
-                    g.files['ramadan-tracker-data.json']
-                );
-                if (existingGist) {
-                    userData.gistId = existingGist.id;
-                }
+            if (!account) {
+                return { success: false, error: 'No account found with this email. Try creating one.' };
             }
 
+            // Verify password
+            const passwordHash = await hashPassword(password);
+            if (passwordHash !== account.passwordHash) {
+                return { success: false, error: 'Incorrect password' };
+            }
+
+            // Set session
+            const userData = { id: account.id, name: account.name, email: normalizedEmail };
             setUser(userData);
-            saveAuth(userData);
-            setLoading(false);
-            return { success: true, user: userData };
-        } catch (err) {
-            setLoading(false);
-            setSyncError(err.message);
-            return { success: false, error: err.message };
+            localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
+
+            return { success: true, user: userData, trackerData: account.trackerData };
+        } catch (error) {
+            return { success: false, error: 'Something went wrong. Please try again.' };
         }
-    }, [saveAuth]);
+    }, []);
 
-    // Sync data TO GitHub (upload)
-    const syncToGitHub = useCallback(async (trackerData) => {
-        if (!user || !user.token) return { success: false, error: 'Not logged in' };
-
-        try {
-            setSyncing(true);
-            setSyncError(null);
-
-            const content = JSON.stringify(trackerData, null, 2);
-            const gistData = {
-                description: 'Ramadan Habit Tracker - Data Backup',
-                public: false,
-                files: {
-                    'ramadan-tracker-data.json': {
-                        content: content,
-                    }
-                }
-            };
-
-            let res;
-            if (user.gistId) {
-                // Update existing gist
-                res = await fetch(`${GITHUB_API}/gists/${user.gistId}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Authorization': `Bearer ${user.token}`,
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(gistData),
-                });
-            } else {
-                // Create new gist
-                res = await fetch(`${GITHUB_API}/gists`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${user.token}`,
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(gistData),
-                });
-            }
-
-            if (!res.ok) {
-                throw new Error('Failed to sync data to GitHub');
-            }
-
-            const gist = await res.json();
-            const now = new Date().toISOString();
-
-            const updatedUser = { ...user, gistId: gist.id, lastSynced: now };
-            setUser(updatedUser);
-            saveAuth(updatedUser);
-            setLastSynced(new Date(now));
-            setSyncing(false);
-            return { success: true };
-        } catch (err) {
-            setSyncing(false);
-            setSyncError(err.message);
-            return { success: false, error: err.message };
-        }
-    }, [user, saveAuth]);
-
-    // Sync data FROM GitHub (download)
-    const syncFromGitHub = useCallback(async () => {
-        if (!user || !user.token || !user.gistId) {
-            return { success: false, error: 'No saved data found on GitHub' };
-        }
-
-        try {
-            setSyncing(true);
-            setSyncError(null);
-
-            const res = await fetch(`${GITHUB_API}/gists/${user.gistId}`, {
-                headers: {
-                    'Authorization': `Bearer ${user.token}`,
-                    'Accept': 'application/vnd.github.v3+json',
-                }
-            });
-
-            if (!res.ok) {
-                throw new Error('Failed to fetch data from GitHub');
-            }
-
-            const gist = await res.json();
-            const file = gist.files['ramadan-tracker-data.json'];
-            if (!file) {
-                throw new Error('No tracker data found in the gist');
-            }
-
-            const data = JSON.parse(file.content);
-            setSyncing(false);
-            return { success: true, data };
-        } catch (err) {
-            setSyncing(false);
-            setSyncError(err.message);
-            return { success: false, error: err.message };
+    // Save tracker data to the user's account
+    const saveUserData = useCallback((trackerData) => {
+        if (!user) return;
+        const accounts = getAccounts();
+        const account = accounts[user.email];
+        if (account) {
+            account.trackerData = trackerData;
+            account.lastSaved = new Date().toISOString();
+            saveAccounts(accounts);
         }
     }, [user]);
 
-    // Logout
+    // Load tracker data from the user's account
+    const loadUserData = useCallback(() => {
+        if (!user) return null;
+        const accounts = getAccounts();
+        const account = accounts[user.email];
+        return account?.trackerData || null;
+    }, [user]);
+
+    // Sign out
     const logout = useCallback(() => {
         setUser(null);
-        setLastSynced(null);
-        setSyncError(null);
         localStorage.removeItem(AUTH_KEY);
     }, []);
 
     return {
         user,
         loading,
-        syncing,
-        syncError,
-        lastSynced,
-        loginWithGitHub,
-        syncToGitHub,
-        syncFromGitHub,
+        createAccount,
+        signIn,
+        saveUserData,
+        loadUserData,
         logout,
     };
 };

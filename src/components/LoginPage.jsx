@@ -1,188 +1,241 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Github, LogIn, Eye, EyeOff, Moon, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
+import { Moon, LogIn, UserPlus, Eye, EyeOff, AlertCircle, Mail, Lock, User, ArrowLeft } from 'lucide-react';
 
-const LoginPage = ({ onLogin, loading: authLoading }) => {
-    const [token, setToken] = useState('');
-    const [showToken, setShowToken] = useState(false);
+const LoginPage = ({ onSignIn, onCreateAccount, loading: authLoading }) => {
+    const [mode, setMode] = useState('signin'); // 'signin' or 'signup'
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!token.trim()) {
-            setError('Please enter your GitHub Personal Access Token');
-            return;
-        }
         setError('');
         setLoading(true);
-        const result = await onLogin(token.trim());
-        setLoading(false);
-        if (!result.success) {
-            setError(result.error);
+
+        try {
+            let result;
+            if (mode === 'signup') {
+                result = await onCreateAccount(name, email, password);
+            } else {
+                result = await onSignIn(email, password);
+            }
+
+            if (!result.success) {
+                setError(result.error || 'Something went wrong');
+            }
+        } catch (err) {
+            setError('An unexpected error occurred');
         }
+
+        setLoading(false);
     };
 
-    const handleSkip = () => {
-        onLogin(null); // Skip auth, use local-only mode
+    const switchMode = () => {
+        setMode(mode === 'signin' ? 'signup' : 'signin');
+        setError('');
     };
+
+    const isSubmitting = loading || authLoading;
 
     return (
         <div className="login-page">
-            {/* Background decoration */}
             <div className="login-bg-decoration" />
 
             <motion.div
                 className="login-container"
-                initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
             >
                 {/* Logo */}
-                <motion.div
-                    className="login-logo"
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2, duration: 0.5 }}
-                >
+                <div className="login-logo">
                     <div className="login-moon-icon animate-float">
-                        <Moon size={32} />
+                        <Moon size={28} />
                     </div>
-                    <h1 className="text-gradient-gold" style={{ fontSize: '2rem', fontWeight: 900, marginTop: '1rem' }}>
+                    <h1 className="header-title text-gradient-gold" style={{ fontSize: '2rem', marginTop: '0.75rem' }}>
                         Ramadan Tracker
                     </h1>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                    <p className="header-subtitle" style={{ marginTop: '0.25rem' }}>
                         Reflect · Track · Grow
                     </p>
-                </motion.div>
+                </div>
 
-                {/* Login Form */}
-                <motion.div
-                    className="login-card glass-card"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3, duration: 0.5 }}
-                >
-                    <div className="login-card-header">
-                        <Github size={24} style={{ color: 'var(--text-primary)' }} />
-                        <div>
-                            <h2 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Sign in with GitHub</h2>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                                Your data will be synced to your GitHub account
-                            </p>
-                        </div>
-                    </div>
+                {/* Auth Card */}
+                <div className="login-card glass-card">
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={mode}
+                            initial={{ opacity: 0, x: mode === 'signup' ? 20 : -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: mode === 'signup' ? -20 : 20 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            <div className="login-card-header">
+                                {mode === 'signup' ? (
+                                    <UserPlus size={20} style={{ color: 'var(--accent-green)' }} />
+                                ) : (
+                                    <LogIn size={20} style={{ color: 'var(--accent-gold)' }} />
+                                )}
+                                <div>
+                                    <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        {mode === 'signup' ? 'Create Account' : 'Welcome Back'}
+                                    </h2>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        {mode === 'signup'
+                                            ? 'Start tracking your Ramadan journey'
+                                            : 'Sign in to continue your journey'
+                                        }
+                                    </p>
+                                </div>
+                            </div>
 
-                    <form onSubmit={handleSubmit} className="login-form">
-                        <div className="login-input-group">
-                            <label htmlFor="github-token" className="login-label">
-                                Personal Access Token
-                            </label>
-                            <div className="login-input-wrap">
-                                <input
-                                    id="github-token"
-                                    type={showToken ? 'text' : 'password'}
-                                    value={token}
-                                    onChange={(e) => { setToken(e.target.value); setError(''); }}
-                                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                                    className="input-field login-input"
-                                    disabled={loading}
-                                    autoComplete="off"
-                                />
+                            <form onSubmit={handleSubmit} className="login-form">
+                                {/* Name field — only for signup */}
+                                {mode === 'signup' && (
+                                    <div className="login-input-group">
+                                        <label className="login-label">Your Name</label>
+                                        <div className="login-input-wrap">
+                                            <div className="login-input-icon">
+                                                <User size={16} />
+                                            </div>
+                                            <input
+                                                type="text"
+                                                className="input login-input-with-icon"
+                                                placeholder="Enter your name"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                required={mode === 'signup'}
+                                                id="signup-name-input"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Email field */}
+                                <div className="login-input-group">
+                                    <label className="login-label">Email Address</label>
+                                    <div className="login-input-wrap">
+                                        <div className="login-input-icon">
+                                            <Mail size={16} />
+                                        </div>
+                                        <input
+                                            type="email"
+                                            className="input login-input-with-icon"
+                                            placeholder="you@example.com"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            required
+                                            id="login-email-input"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Password field */}
+                                <div className="login-input-group">
+                                    <label className="login-label">Password</label>
+                                    <div className="login-input-wrap">
+                                        <div className="login-input-icon">
+                                            <Lock size={16} />
+                                        </div>
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            className="input login-input-with-icon login-input"
+                                            placeholder={mode === 'signup' ? 'At least 6 characters' : 'Enter your password'}
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            required
+                                            minLength={mode === 'signup' ? 6 : undefined}
+                                            id="login-password-input"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="login-eye-btn"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            tabIndex={-1}
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Error */}
+                                <AnimatePresence>
+                                    {error && (
+                                        <motion.div
+                                            className="login-error"
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                        >
+                                            <AlertCircle size={14} />
+                                            {error}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                {/* Submit Button */}
                                 <button
-                                    type="button"
-                                    className="login-eye-btn"
-                                    onClick={() => setShowToken(!showToken)}
-                                    tabIndex={-1}
+                                    type="submit"
+                                    className="btn btn-primary login-submit"
+                                    disabled={isSubmitting}
+                                    id="login-submit-btn"
                                 >
-                                    {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    {isSubmitting ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                                            <span className="spin" style={{ display: 'inline-flex' }}>⏳</span>
+                                            {mode === 'signup' ? 'Creating Account...' : 'Signing In...'}
+                                        </span>
+                                    ) : (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                                            {mode === 'signup' ? <UserPlus size={18} /> : <LogIn size={18} />}
+                                            {mode === 'signup' ? 'Create Account' : 'Sign In'}
+                                        </span>
+                                    )}
+                                </button>
+                            </form>
+
+                            {/* Switch mode */}
+                            <div className="login-switch">
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                    {mode === 'signin' ? "Don't have an account?" : 'Already have an account?'}
+                                </span>
+                                <button className="login-switch-btn" onClick={switchMode}>
+                                    {mode === 'signin' ? 'Create Account' : 'Sign In'}
                                 </button>
                             </div>
-                        </div>
+                        </motion.div>
+                    </AnimatePresence>
+                </div>
 
-                        <AnimatePresence>
-                            {error && (
-                                <motion.div
-                                    className="login-error"
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                >
-                                    <AlertCircle size={14} />
-                                    {error}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        <button
-                            type="submit"
-                            className="btn-primary login-submit"
-                            disabled={loading}
-                            id="login-btn"
-                        >
-                            {loading ? (
-                                <>
-                                    <Loader2 size={18} className="spin" />
-                                    Connecting...
-                                </>
-                            ) : (
-                                <>
-                                    <LogIn size={18} />
-                                    Sign In
-                                </>
-                            )}
-                        </button>
-                    </form>
-
-                    <div className="login-help">
-                        <a
-                            href="https://github.com/settings/tokens/new?description=Ramadan+Tracker&scopes=gist"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="login-help-link"
-                        >
-                            <ExternalLink size={12} />
-                            Create a token (select "gist" scope)
-                        </a>
-                    </div>
-                </motion.div>
-
-                {/* Skip option */}
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 }}
-                    style={{ textAlign: 'center', marginTop: '1.5rem' }}
-                >
+                {/* Skip */}
+                <div style={{ textAlign: 'center', marginTop: '1rem' }}>
                     <button
                         className="login-skip-btn"
-                        onClick={handleSkip}
-                        id="skip-login-btn"
+                        onClick={() => onSignIn(null, null)}
                     >
                         Continue without account (local only)
                     </button>
-                </motion.div>
+                </div>
 
-                {/* Features */}
-                <motion.div
-                    className="login-features"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.6 }}
-                >
+                {/* Feature badges */}
+                <div className="login-features">
                     <div className="login-feature-item">
                         <span className="login-feature-icon">🔒</span>
-                        <span>Private Gist backup</span>
-                    </div>
-                    <div className="login-feature-item">
-                        <span className="login-feature-icon">🔄</span>
-                        <span>Sync across devices</span>
+                        <span>Secure & Private</span>
                     </div>
                     <div className="login-feature-item">
                         <span className="login-feature-icon">📊</span>
                         <span>Track your progress</span>
                     </div>
-                </motion.div>
+                    <div className="login-feature-item">
+                        <span className="login-feature-icon">🏆</span>
+                        <span>Earn achievements</span>
+                    </div>
+                </div>
             </motion.div>
         </div>
     );

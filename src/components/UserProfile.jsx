@@ -1,42 +1,31 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cloud, CloudOff, Download, Upload, LogOut, Check, Loader2, AlertCircle, X } from 'lucide-react';
+import { User, LogOut, Save, ChevronDown } from 'lucide-react';
 
-const UserProfile = ({ user, syncing, syncError, lastSynced, onSync, onRestore, onLogout }) => {
+const UserProfile = ({ user, onSave, onLogout }) => {
     const [showMenu, setShowMenu] = useState(false);
-    const [syncSuccess, setSyncSuccess] = useState(false);
-    const [restoreSuccess, setRestoreSuccess] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
 
-    const handleSync = async () => {
-        const result = await onSync();
-        if (result?.success) {
-            setSyncSuccess(true);
-            setTimeout(() => setSyncSuccess(false), 2000);
-        }
-    };
-
-    const handleRestore = async () => {
-        const result = await onRestore();
-        if (result?.success) {
-            setRestoreSuccess(true);
-            setTimeout(() => setRestoreSuccess(false), 2000);
-        }
+    const handleSave = () => {
+        onSave();
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
     };
 
     if (!user) return null;
 
-    // Guest mode (no GitHub token)
-    if (!user.token) {
+    // Guest mode
+    if (!user.email) {
         return (
             <div className="user-profile-bar glass-card">
                 <div className="user-profile-info">
                     <div className="user-avatar-placeholder">
-                        <CloudOff size={14} />
+                        <User size={14} />
                     </div>
-                    <span className="user-name-text">Local Mode</span>
+                    <span className="user-name-text">Guest Mode</span>
                 </div>
-                <span className="user-local-hint" style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                    Data stored locally only
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                    Data stored locally
                 </span>
             </div>
         );
@@ -46,28 +35,28 @@ const UserProfile = ({ user, syncing, syncError, lastSynced, onSync, onRestore, 
         <>
             <div className="user-profile-bar glass-card" onClick={() => setShowMenu(!showMenu)}>
                 <div className="user-profile-info">
-                    {user.avatar ? (
-                        <img src={user.avatar} alt="" className="user-avatar" />
-                    ) : (
-                        <div className="user-avatar-placeholder">
-                            <Cloud size={14} />
-                        </div>
-                    )}
+                    <div className="user-avatar-placeholder" style={{
+                        background: 'linear-gradient(135deg, rgba(247,201,72,0.2), rgba(167,139,250,0.2))',
+                        color: 'var(--accent-gold)',
+                        fontWeight: 700,
+                        fontSize: '0.75rem',
+                    }}>
+                        {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
                     <div>
-                        <span className="user-name-text">{user.name || user.login}</span>
-                        {lastSynced && (
-                            <span className="user-sync-time">
-                                Synced {formatTimeAgo(lastSynced)}
-                            </span>
-                        )}
+                        <span className="user-name-text">{user.name}</span>
+                        <span className="user-sync-time">{user.email}</span>
                     </div>
                 </div>
 
-                <div className="user-profile-actions">
-                    {syncing && <Loader2 size={14} className="spin" style={{ color: 'var(--accent-gold)' }} />}
-                    {syncSuccess && <Check size={14} style={{ color: 'var(--accent-green)' }} />}
-                    <Cloud size={14} style={{ color: 'var(--text-muted)' }} />
-                </div>
+                <ChevronDown
+                    size={14}
+                    style={{
+                        color: 'var(--text-muted)',
+                        transition: 'transform 0.2s',
+                        transform: showMenu ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                />
             </div>
 
             <AnimatePresence>
@@ -79,48 +68,24 @@ const UserProfile = ({ user, syncing, syncError, lastSynced, onSync, onRestore, 
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
                         transition={{ duration: 0.15 }}
                     >
-                        <button className="user-menu-item" onClick={handleSync} disabled={syncing}>
-                            <Upload size={16} />
-                            <span>{syncing ? 'Syncing...' : syncSuccess ? 'Synced!' : 'Backup to GitHub'}</span>
-                        </button>
-                        <button className="user-menu-item" onClick={handleRestore} disabled={syncing}>
-                            <Download size={16} />
-                            <span>{restoreSuccess ? 'Restored!' : 'Restore from GitHub'}</span>
+                        <button className="user-menu-item" onClick={handleSave}>
+                            <Save size={16} />
+                            <span>{saveSuccess ? '✓ Saved!' : 'Save Progress'}</span>
                         </button>
                         <div className="user-menu-divider" />
                         <button className="user-menu-item user-menu-danger" onClick={onLogout}>
                             <LogOut size={16} />
                             <span>Sign Out</span>
                         </button>
-
-                        {syncError && (
-                            <div className="user-menu-error">
-                                <AlertCircle size={12} />
-                                {syncError}
-                            </div>
-                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Click outside to close */}
             {showMenu && (
                 <div className="user-menu-backdrop" onClick={() => setShowMenu(false)} />
             )}
         </>
     );
 };
-
-function formatTimeAgo(date) {
-    const now = new Date();
-    const diff = now - date;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-}
 
 export default UserProfile;

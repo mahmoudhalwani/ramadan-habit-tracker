@@ -28,8 +28,8 @@ function App() {
   } = useRamadanTracker();
 
   const {
-    user, loading: authLoading, syncing, syncError, lastSynced,
-    loginWithGitHub, syncToGitHub, syncFromGitHub, logout,
+    user, loading: authLoading,
+    createAccount, signIn, saveUserData, loadUserData, logout,
   } = useAuth();
 
   const [showDashboard, setShowDashboard] = useState(false);
@@ -42,13 +42,32 @@ function App() {
   // Check if user is already logged in
   useEffect(() => {
     if (!authLoading) {
-      const hasAuth = localStorage.getItem('ramadan-tracker-auth');
       const hasSkipped = localStorage.getItem('ramadan-tracker-skipped');
-      if (hasAuth || hasSkipped) {
+      if (user || hasSkipped) {
         setIsLoggedIn(true);
       }
     }
-  }, [authLoading]);
+  }, [authLoading, user]);
+
+  // Load user data when logged in
+  useEffect(() => {
+    if (user && user.email) {
+      const savedData = loadUserData();
+      if (savedData) {
+        loadData(savedData);
+      }
+    }
+  }, [user]); // Only run when user changes
+
+  // Auto-save tracker data for signed-in users
+  useEffect(() => {
+    if (user && user.email && isLoggedIn) {
+      const saveTimeout = setTimeout(() => {
+        saveUserData({ data, customHabits, xp, currentDay });
+      }, 1000);
+      return () => clearTimeout(saveTimeout);
+    }
+  }, [data, customHabits, xp, currentDay, user, isLoggedIn, saveUserData]);
 
   // Window resize for confetti
   useEffect(() => {
@@ -81,14 +100,26 @@ function App() {
     }
   };
 
-  const handleLogin = async (token) => {
-    if (token === null) {
-      // Skip auth — local only mode
+  const handleSignIn = async (email, password) => {
+    // Skip auth — local/guest mode
+    if (email === null) {
       localStorage.setItem('ramadan-tracker-skipped', 'true');
       setIsLoggedIn(true);
       return { success: true };
     }
-    const result = await loginWithGitHub(token);
+
+    const result = await signIn(email, password);
+    if (result.success) {
+      setIsLoggedIn(true);
+      if (result.trackerData) {
+        loadData(result.trackerData);
+      }
+    }
+    return result;
+  };
+
+  const handleCreateAccount = async (name, email, password) => {
+    const result = await createAccount(name, email, password);
     if (result.success) {
       setIsLoggedIn(true);
     }
@@ -101,16 +132,10 @@ function App() {
     setIsLoggedIn(false);
   };
 
-  const handleSync = async () => {
-    return await syncToGitHub({ data, customHabits, xp, currentDay });
-  };
-
-  const handleRestore = async () => {
-    const result = await syncFromGitHub();
-    if (result.success && result.data) {
-      loadData(result.data);
+  const handleSave = () => {
+    if (user && user.email) {
+      saveUserData({ data, customHabits, xp, currentDay });
     }
-    return result;
   };
 
   // Group habits by category
@@ -126,7 +151,13 @@ function App() {
 
   // Show login page if not logged in
   if (!isLoggedIn && !authLoading) {
-    return <LoginPage onLogin={handleLogin} loading={authLoading} />;
+    return (
+      <LoginPage
+        onSignIn={handleSignIn}
+        onCreateAccount={handleCreateAccount}
+        loading={authLoading}
+      />
+    );
   }
 
   // Loading state
@@ -180,14 +211,10 @@ function App() {
         </div>
       </header>
 
-      {/* User Profile / Sync Bar */}
+      {/* User Profile Bar */}
       <UserProfile
         user={user}
-        syncing={syncing}
-        syncError={syncError}
-        lastSynced={lastSynced}
-        onSync={handleSync}
-        onRestore={handleRestore}
+        onSave={handleSave}
         onLogout={handleLogout}
       />
 

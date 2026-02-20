@@ -1423,6 +1423,43 @@ h4 {
   padding-right: 2.5rem !important;
 }
 
+.login-input-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.login-input-with-icon {
+  padding-left: 2.5rem !important;
+}
+
+.login-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+.login-switch-btn {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-gold);
+  transition: color var(--transition-fast);
+  padding: 0.2rem 0;
+}
+
+.login-switch-btn:hover {
+  color: #fde68a;
+}
+
 .login-eye-btn {
   position: absolute;
   right: 0.5rem;

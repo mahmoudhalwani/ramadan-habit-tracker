@@ -53,21 +53,27 @@ const TasbihCounter = () => {
         setRipples(prev => [...prev, rippleId]);
         setTimeout(() => setRipples(prev => prev.filter(r => r !== rippleId)), 800);
 
-        setCount(prev => {
-            const newCount = prev + 1;
-            if (newCount >= target) {
-                setRounds(r => r + 1);
-                setTotalCount(t => t + 1);
-                setTimeout(() => setCount(0), 300);
-                return newCount;
-            }
-            setTotalCount(t => t + 1);
-            return newCount;
-        });
+        setCount(prev => prev + 1);
+        setTotalCount(prev => prev + 1);
 
         setIsPressed(true);
         setTimeout(() => setIsPressed(false), 150);
-    }, [target, hapticEnabled]);
+    }, [hapticEnabled]);
+
+    // Handle round completion when count reaches target
+    // Use a ref to prevent StrictMode from double-incrementing rounds
+    const lastRoundCount = useRef(-1);
+    useEffect(() => {
+        if (count > 0 && count >= target && lastRoundCount.current !== count) {
+            lastRoundCount.current = count;
+            setRounds(r => r + 1);
+            const timer = setTimeout(() => setCount(0), 300);
+            return () => clearTimeout(timer);
+        }
+        if (count === 0) {
+            lastRoundCount.current = -1;
+        }
+    }, [count, target]);
 
     const handleReset = useCallback(() => {
         setCount(0);
